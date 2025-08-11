@@ -1,0 +1,9 @@
+.python-version
+uv.lock
+.gript/
+.vscode/
+.idea/
+.DS_Store
+*.env
+dist/
+
