@@ -1,86 +1,83 @@
-# Elabora un programa que realice el cálculo del precio de
-# entrada para los visitantes que desean recorrer el
-# Museo de Antropología e Historia de tu ciudad, el cual debe considerar los siguientes descuentos:
-# Adulto Mayor - 12%
-# Profesor - 10%
-# Estudiante - 10%
-# El precio de entrada es de $30 para menores de edad y $45 para mayores de 18 años, mientras que los niños menores de tres años no pagan boleto.
+"""
+Elabora un programa que realice el cálculo del precio de
+entrada para los visitantes que desean recorrer el
+Museo de Antropología e Historia de tu ciudad.
 
-### Empezamos por pedir al usuario cuantos visitantes son para poder utilizar un for-loop
-num_visitantes = int(input("Cuantos visitantes son? "))
+Descuentos:
+  - Adulto mayor: 12%
+  - Profesor: 10%
+  - Estudiante: 10%
 
-### Aqui almacenaremos los costos de cada visitante
-### Ya que al final de cada loop guardamos el costo final por visitante aqui mismo para posteriormente
-### Mostrarlos por un loop al final del programa!
+Precios base:
+  - Niños menores de 3 años: Gratis
+  - Menores de edad (3 a 17): $30
+  - Adultos (18 en adelante): $45
+"""
+
+# Pedimos al usuario cuántos visitantes son
+num_visitantes = int(input("¿Cuántos visitantes son? "))
+
+# Aquí almacenaremos los costos de cada visitante
 costos_por_visitante = []
 
-### Loopeamos a traves de un rango de visitantes (esto simplemente es una lista del 0 al numero de vistantes)
-### Esto con la finalidad de solo determinar cuantas veces realmente se va a repetir el loop
-### Ademas, guardamos el numero del visitante del arreglo de rangos para poder identificarlos y no confundir al usuario
+# Iteramos según la cantidad de visitantes
 for num in range(num_visitantes):
-    ### Pedimos la edad del visitante {num} para posteriormente identificar si les corresponde un boleto de menor de edad
-    ### O mayor de edad
-    edad = int(input(f"Cual es la edad del visitante {num + 1}: "))
+    # Pedimos la edad del visitante actual
+    edad = int(input(f"¿Cuál es la edad del visitante {num + 1}? "))
 
-    ### Aqui hacemos un simple check de que la edad sea valida, si no,
-    ### se tomara un valor por defecto de 18 anos para evitar problemas en el programa
+    # Si la edad es inválida, asumimos adulto (18 años)
     if edad < 0:
-        print("Edad no valida, se tomara su edad como mayor de edad.")
+        print("Edad no válida, se tomará como mayor de edad.")
         edad = 18
 
-    ### El tipo de visitante se lo pedimos al usuario para determinar el descuento que se le aplicara
-    ### Le decimos las opciones que hay para evitar problemas
+    # Pedimos el tipo de visitante (adulto mayor, profesor, estudiante, etc.)
     tipo_visitante = input(
-        "Que tipo de visitnate es [adulto mayor | profesor | estudiante ]: "
+        "¿Qué tipo de visitante es? [adulto mayor | profesor | estudiante]: "
     )
 
-    ### Aqui definimos las variables que usaremos para calcular el costo final del boleto
+    # Variables para el cálculo del boleto
     costo_del_boleto = 0
     descuento = 0
 
-    ### El tipo de visitante lo convertimos a minusculas para poder comparar correctamente en el caso que el
-    ### usuario halla escrito mal alguna letra en mayusculas
-    ### Y hacemos una comparacion con la cadena de texto adulto mayor para identificar el descuento que se le aplicara
+    # Convertimos el texto a minúsculas con .lower()
+    # Esto nos permite comparar sin importar cómo lo escribió el usuario, ya que lo convertimos a minúsculas
     if tipo_visitante.lower() == "adulto mayor":
         costo_del_boleto = 45
         descuento = 0.12
-    ### De igual manera hacemos otra comparacion con la cadena de texto profesor para determinal el descuento correcto
+
     elif tipo_visitante.lower() == "profesor":
         costo_del_boleto = 45
         descuento = 0.10
-    ### Finalmente hacemos la comparacion con la cadena de texto estudiante para determinar el descuento correcto
+
     elif tipo_visitante.lower() == "estudiante":
-        ### Esta vez si nos importa la edad, ya que un estudiante puede ser menor o mayor de edad
-        ### Y esto para identificar el costo correcto del boleto
+        # Los estudiantes pueden ser menores o mayores de edad,
+        # por lo tanto revisamos su edad para el precio base
         if edad < 18:
             costo_del_boleto = 30
         else:
             costo_del_boleto = 45
         descuento = 0.10
 
-    ### Este else se ejecutara en el caso que el tipo de visitante no sea ninguno de los anteriores
-    ### Si asi es el caso, simplemente se cobrara el costo completo del boleto ya que no se pudo identificar un tipo de visitante correcto
     else:
-        ### Mostramos un mensaje al usuario para informarle que el tipo de visitante no es reconocido
-        print(
-            "Tipo de visitante no reconocido, se cobrara el costo completo del boleto"
-        )
-        ### Hacemos un check de la edad para determinar el costo correcto del boleto
-        if edad < 18:
+        # Si no se reconoce el tipo de visitante, no se aplica descuento
+        print("Tipo de visitante no reconocido, se cobrará el costo completo.")
+        if edad < 3:
+            costo_del_boleto = 0
+        elif edad < 18:
             costo_del_boleto = 30
         else:
             costo_del_boleto = 45
 
-        ### Se calcula directamente el final costo del boleto sin descuento aplicado
         final_costo_del_boleto = costo_del_boleto
+        costos_por_visitante.append(final_costo_del_boleto)
         continue
 
-    ### Se calcula el costo final del boleto con el descuento aplicado
+    # Calculamos el costo final aplicando el descuento
     final_costo_del_boleto = costo_del_boleto - (costo_del_boleto * descuento)
-    ### Se almacena el costo final del boleto en la lista que habiamos definido arriba, esto se hace por practicidad
+
+    # Guardamos el costo final en la lista
     costos_por_visitante.append(final_costo_del_boleto)
 
-### Al final del programa, se muestran los costos finales de cada visitante
-### haciendo un loop por cada costo dentro de la lista costo_por_visitante
+# Mostramos los costos de todos los visitantes
 for costo in costos_por_visitante:
     print(f"El costo final del boleto es: ${costo:.2f}")
