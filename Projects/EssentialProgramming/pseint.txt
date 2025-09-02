@@ -1,0 +1,25 @@
+Inicio
+    Mostrar menú:
+        1. Ver libros disponibles
+        2. Prestar libro
+        3. Devolver libro
+        4. Salir
+    Leer opción
+    Segun opción hacer
+        Caso 1:
+            Mostrar lista de libros disponibles
+        Caso 2:
+            Pedir nombre de usuario y libro
+            Si libro disponible y usuario < 3 préstamos
+                Registrar préstamo
+            Sino
+                Mostrar error
+        Caso 3:
+            Pedir usuario y libro
+            Si libro en préstamos de usuario
+                Registrar devolución
+            Sino
+                Mostrar error
+        Caso 4:
+            Fin del programa
+Fin
