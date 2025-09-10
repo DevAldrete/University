@@ -1,0 +1,5 @@
+Ticket: 224
+Hora: 18:45
+Numero de socio: 3kuli98
+Tipo de reporte: 4
+Status: 5
