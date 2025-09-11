@@ -1,25 +1,41 @@
 Inicio
-    Mostrar menú:
-        1. Ver libros disponibles
-        2. Prestar libro
-        3. Devolver libro
-        4. Salir
-    Leer opción
-    Segun opción hacer
-        Caso 1:
-            Mostrar lista de libros disponibles
-        Caso 2:
-            Pedir nombre de usuario y libro
-            Si libro disponible y usuario < 3 préstamos
-                Registrar préstamo
-            Sino
-                Mostrar error
-        Caso 3:
-            Pedir usuario y libro
-            Si libro en préstamos de usuario
-                Registrar devolución
-            Sino
-                Mostrar error
-        Caso 4:
-            Fin del programa
+    Cargar datos desde biblioteca.json
+    Mientras True:
+        Mostrar menú:
+            1. Ver libros disponibles
+            2. Agregar libro
+            3. Modificar libro
+            4. Eliminar libro
+            5. Prestar libro
+            6. Devolver libro
+            7. Visualizar préstamos y multas
+            8. Pagar multa
+            9. Administrar préstamos manual
+            10. Salir
+        Leer opción del usuario
+        Segun opción hacer
+            Caso 1:
+                Llamar a mostrar_libros(biblioteca)
+            Caso 2:
+                Llamar a agregar_libro(biblioteca)
+            Caso 3:
+                Llamar a modificar_libro(biblioteca)
+            Caso 4:
+                Llamar a eliminar_libro(biblioteca)
+            Caso 5:
+                Llamar a prestar_libro(biblioteca)
+            Caso 6:
+                Llamar a devolver_libro(biblioteca)
+            Caso 7:
+                Llamar a visualizar_prestamos(biblioteca)
+            Caso 8:
+                Llamar a pagar_multa(biblioteca)
+            Caso 9:
+                Llamar a administrar_prestamos_manual(biblioteca)
+            Caso 10:
+                Guardar datos en biblioteca.json
+                Salir del bucle
+            De otro modo:
+                Mostrar mensaje de opción inválida
+    Fin Mientras
 Fin

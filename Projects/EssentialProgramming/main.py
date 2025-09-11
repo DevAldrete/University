@@ -15,12 +15,12 @@ Notas de diseño:
 - MultaPendiente: se actualiza dinámicamente y puede guardarse para referencia al visualizar (se recalcula al entrar a visualizar o al intentar prestar).
 """
 
-import json  # Lectura/escritura del archivo JSON
-import uuid  # Generación de IDs únicos (luego recortados a 6 caracteres)
+import json  # Lectura/escritura del archivo JSON: serializa objetos Python a texto JSON y viceversa
+import uuid  # Generación de identificadores únicos (UUID) para libros
 from datetime import (
     datetime,
     timedelta,
-)  # Fechas para préstamos, límite y cálculo de días
+)  # datetime: manipulación de fechas y horas; timedelta: diferencia entre fechas
 
 # --- Constantes de configuración ---
 RUTA_JSON = "biblioteca.json"  # Archivo JSON de almacenamiento
@@ -108,9 +108,20 @@ def calcular_multa(fecha_str):
     - Si hoy > fecha_límite: multa = días_retraso * MULTA_POR_DIA
     - Si no hay retraso: 0
     """
-    fecha_prestamo = datetime.strptime(fecha_str, "%Y-%m-%d")
+    # Deprecated: mantiene compatibilidad con estructura antigua de fecha de préstamo
+    fecha_prestamo = datetime.strptime(fecha_str, "%Y-%m-%d %H:%M") if len(fecha_str) > 10 else datetime.strptime(fecha_str, "%Y-%m-%d")
     fecha_limite = fecha_prestamo + timedelta(days=DIAS_PRESTAMO)
     dias_retraso = (datetime.now().date() - fecha_limite.date()).days
+    return max(0, dias_retraso * MULTA_POR_DIA)
+
+
+# Cálculo de multa basado en fecha de devolución de cada libro
+def calcular_multa_libro(book):
+    """
+    Dado un diccionario book con FechaDevolucion "YYYY-MM-DD HH:MM", retorna multa si hay retraso.
+    """
+    fecha_limite = datetime.strptime(book["FechaDevolucion"], "%Y-%m-%d %H:%M")
+    dias_retraso = (datetime.now() - fecha_limite).days
     return max(0, dias_retraso * MULTA_POR_DIA)
 
 
@@ -119,8 +130,12 @@ def actualizar_multas(biblioteca):
     Recalcula y actualiza MultaPendiente para todos los usuarios con préstamos activos.
     Regla: Multa se calcula contra la fecha del registro del usuario (modelo simple).
     """
+    # Recalcula MultaPendiente sumando multas de cada libro activo
     for usuario, datos in biblioteca["prestamos"].items():
-        datos["MultaPendiente"] = calcular_multa(datos["Fecha"])
+        total = 0
+        for book in datos.get("Libros", []):
+            total += calcular_multa_libro(book)
+        datos["MultaPendiente"] = total
 
 
 # --- Vistas e inventario ---
@@ -211,9 +226,10 @@ def eliminar_libro(biblioteca):
 
     nombre_libro = biblioteca["libros"][libro_id]["Nombre"]
     for prestamo in biblioteca["prestamos"].values():
-        if nombre_libro in prestamo["Libros"]:
-            print("No se puede eliminar un libro que está prestado.")
-            return
+        for book in prestamo.get("Libros", []):
+            if isinstance(book, dict) and book.get("Nombre") == nombre_libro:
+                print("No se puede eliminar un libro que está prestado.")
+                return
 
     del biblioteca["libros"][libro_id]
     print("Libro eliminado.")
@@ -224,64 +240,50 @@ def eliminar_libro(biblioteca):
 
 def prestar_libro(biblioteca):
     """
-    Registra un préstamo:
-    - Autocompleta ID.
-    - Verifica cantidad disponible.
-    - Aplica límite de 4 libros por usuario.
-    - Bloquea préstamo si el usuario tiene multa pendiente > 0.
-    - Descuenta inventario y actualiza 'Disponible'.
-    - Si es primer préstamo del usuario, registra Fecha = hoy.
+    Registra un préstamo por cada libro:
+    - Autocompleta ID de libro.
+    - Verifica stock, límite de libros y multas pendientes.
+    - Descuenta inventario y guarda Fecha y FechaDevolucion por registro.
+    - Persistencia en JSON con estructura detallada.
     """
     usuario = input("\nNombre del usuario: ").strip()
-    # Antes de prestar, recalcular multas para bloquear si aplica
+    # Recalcular multas para bloquear préstamo si hay deudas
     actualizar_multas(biblioteca)
-    if (
-        usuario in biblioteca["prestamos"]
-        and biblioteca["prestamos"][usuario].get("MultaPendiente", 0) > 0
-    ):
-        multa = biblioteca["prestamos"][usuario]["MultaPendiente"]
-        print(
-            f"Préstamo bloqueado: el usuario tiene una multa pendiente de ${multa} MXN."
-        )
-        print("Paga la multa para poder continuar.")
+    if usuario in biblioteca["prestamos"] and biblioteca["prestamos"][usuario].get("MultaPendiente", 0) > 0:
+        print(f"Préstamo bloqueado: multa pendiente de ${biblioteca['prestamos'][usuario]['MultaPendiente']} MXN")
         return
-
+    # Selección de libro por ID parcial
     id_parcial = input("ID (o parte del ID) del libro a prestar: ").strip()
     libro_id = autocompletar_id(biblioteca, id_parcial)
     if not libro_id:
         print("No se encontró un libro con ese ID.")
         return
-
     libro = biblioteca["libros"][libro_id]
-
     if libro["Cantidad"] <= 0:
         print("No hay ejemplares disponibles.")
         return
-
-    # Límite de 4 libros por usuario
-    if (
-        usuario in biblioteca["prestamos"]
-        and len(biblioteca["prestamos"][usuario]["Libros"]) >= LIMITE_LIBROS
-    ):
-        print(f"Este usuario ya tiene {LIMITE_LIBROS} libros prestados.")
+    # Verificar límite de préstamos activos
+    actuales = len(biblioteca.get("prestamos", {}).get(usuario, {}).get("Libros", []))
+    if actuales >= LIMITE_LIBROS:
+        print(f"Límite de {LIMITE_LIBROS} libros alcanzado para {usuario}.")
         return
-
-    # Descontar inventario
+    # Actualizar inventario
     libro["Cantidad"] -= 1
     libro["Disponible"] = libro["Cantidad"] > 0
-
-    # Registrar préstamo
+    # Registrar préstamo con fecha de inicio y fecha de devolución por libro
+    now = datetime.now()
+    registro = {
+        "Nombre": libro["Nombre"],
+        "Fecha": now.strftime("%Y-%m-%d %H:%M"),
+        "FechaDevolucion": (now + timedelta(days=DIAS_PRESTAMO)).strftime("%Y-%m-%d %H:%M")
+    }
     if usuario not in biblioteca["prestamos"]:
-        biblioteca["prestamos"][usuario] = {
-            "Fecha": datetime.now().strftime("%Y-%m-%d"),
-            "Libros": [libro["Nombre"]],
-            "MultaPendiente": 0,
-        }
+        biblioteca["prestamos"][usuario] = {"Libros": [registro], "MultaPendiente": 0}
     else:
-        biblioteca["prestamos"][usuario]["Libros"].append(libro["Nombre"])
-        # Fecha se mantiene (modelo simple: fecha del primer préstamo activo)
-
-    print(f"Se ha prestado '{libro['Nombre']}' a {usuario}.")
+        biblioteca["prestamos"][usuario]["Libros"].append(registro)
+    # Inicialmente sin multa en préstamos recién hechos
+    actualizar_multas(biblioteca)
+    print(f"Préstamo registrado: '{libro['Nombre']}' para usuario {usuario}.")
 
 
 def devolver_libro(biblioteca):
@@ -298,7 +300,9 @@ def devolver_libro(biblioteca):
         print("Este usuario no tiene préstamos.")
         return
 
-    if libro_nombre not in biblioteca["prestamos"][usuario]["Libros"]:
+    # Validar que el libro esté prestado (buscar en registros por Nombre)
+    prestamos_usuario = biblioteca["prestamos"][usuario].get("Libros", [])
+    if not any(b.get("Nombre", "").lower() == libro_nombre.lower() for b in prestamos_usuario):
         print("Ese libro no está registrado como prestado a este usuario.")
         return
 
@@ -309,18 +313,22 @@ def devolver_libro(biblioteca):
             datos["Disponible"] = True
             break
 
-    # Remover de la lista del usuario
-    biblioteca["prestamos"][usuario]["Libros"].remove(libro_nombre)
+    # Devolver al inventario (buscar por nombre y luego eliminar registro detallado)
 
-    if not biblioteca["prestamos"][usuario]["Libros"]:
-        # Recalcular multa al cierre del préstamo (puede quedar pendiente)
-        biblioteca["prestamos"][usuario]["MultaPendiente"] = calcular_multa(
-            biblioteca["prestamos"][usuario]["Fecha"]
-        )
-        print(
-            f"Multa pendiente actualizada: ${biblioteca['prestamos'][usuario]['MultaPendiente']} MXN"
-        )
-        # Nota: No se elimina el registro del usuario para permitir pago posterior.
+    # Encontrar y remover la entrada de libro, calcular multa si hay retraso
+    removed = None
+    for book in prestamos_usuario:
+        if book.get("Nombre", "").lower() == libro_nombre.lower():
+            removed = book
+            break
+    if removed:
+        multa_libro = calcular_multa_libro(removed)
+        biblioteca["prestamos"][usuario]["MultaPendiente"] = biblioteca["prestamos"][usuario].get("MultaPendiente", 0) + multa_libro
+        prestamos_usuario.remove(removed)
+        print(f"Multa generada por este libro: ${multa_libro} MXN")
+    # Verificar si sin libros y sin multa, limpiar registro
+    if usuario in biblioteca["prestamos"] and not biblioteca["prestamos"][usuario]["Libros"] and biblioteca["prestamos"][usuario]["MultaPendiente"] == 0:
+        del biblioteca["prestamos"][usuario]
     print(f"El usuario '{usuario}' ha devuelto '{libro_nombre}'.")
 
 
@@ -338,21 +346,20 @@ def visualizar_prestamos(biblioteca):
     actualizar_multas(biblioteca)
 
     for usuario, datos in biblioteca["prestamos"].items():
-        fecha_prestamo = datetime.strptime(datos["Fecha"], "%Y-%m-%d")
-        fecha_limite = fecha_prestamo + timedelta(days=DIAS_PRESTAMO)
-        dias_retraso = max(0, (datetime.now().date() - fecha_limite.date()).days)
-        multa = datos.get("MultaPendiente", 0)
-
         print(f"\nUsuario: {usuario}")
-        print(f"Fecha de préstamo: {datos['Fecha']}")
-        print(
-            f"Libros: {', '.join(datos['Libros']) if datos['Libros'] else '(sin libros activos)'}"
-        )
-        print(f"Fecha límite: {fecha_limite.strftime('%Y-%m-%d')}")
-        if dias_retraso > 0:
-            print(f"Retraso: {dias_retraso} días | Multa calculada: ${multa} MXN")
-        else:
-            print("Sin retraso ni multa.")
+        if not datos.get("Libros"):  # Sin préstamos activos
+            print("(Sin préstamos activos)")
+            print(f"Multa pendiente: ${datos.get('MultaPendiente', 0)} MXN")
+            continue
+        total = 0
+        for book in datos["Libros"]:
+            fecha_lim = datetime.strptime(book["FechaDevolucion"], "%Y-%m-%d %H:%M")
+            dias_retraso = max(0, (datetime.now() - fecha_lim).days)
+            multa = calcular_multa_libro(book)
+            print(f"- '{book['Nombre']}': préstamo {book['Fecha']} | vence {book['FechaDevolucion']} | retraso {dias_retraso} días | multa ${multa} MXN")
+            total += multa
+        print(f"Total multa en préstamos activos: ${total} MXN")
+        print(f"Multa pendiente acumulada: ${datos.get('MultaPendiente', 0)} MXN")
 
 
 def pagar_multa(biblioteca):
@@ -367,11 +374,13 @@ def pagar_multa(biblioteca):
         print("Este usuario no tiene registro de préstamos/multas.")
         return
 
-    # Recalcular por si cambió el estado
-    biblioteca["prestamos"][usuario]["MultaPendiente"] = calcular_multa(
-        biblioteca["prestamos"][usuario]["Fecha"]
-    )
-    saldo = biblioteca["prestamos"][usuario]["MultaPendiente"]
+    # Calcular multa total: deudas anteriores + multas por préstamos activos
+    datos_usuario = biblioteca["prestamos"][usuario]
+    # Fines provenientes de préstamos activos
+    multas_activas = sum(calcular_multa_libro(book) for book in datos_usuario.get("Libros", []))
+    # Deudas previas de libros ya devueltos almacenadas en MultaPendiente
+    deudas_previas = datos_usuario.get("MultaPendiente", 0)
+    saldo = multas_activas + deudas_previas
 
     if saldo <= 0:
         print("El usuario no tiene multa pendiente.")
@@ -385,7 +394,8 @@ def pagar_multa(biblioteca):
         return
 
     nuevo_saldo = max(0, saldo - pago)
-    biblioteca["prestamos"][usuario]["MultaPendiente"] = nuevo_saldo
+    # Registrar nuevo monto pendiente
+    datos_usuario["MultaPendiente"] = nuevo_saldo
     print(f"Pago registrado. Multa restante: ${nuevo_saldo} MXN")
 
     # Si el usuario ya no tiene libros y la multa quedó en 0, se puede limpiar su registro
@@ -421,8 +431,9 @@ def administrar_prestamos_manual(biblioteca):
                 return
         # Asegurar estructura del usuario
         if usuario not in biblioteca["prestamos"]:
+            # Registrar manual con fecha y hora actual
             biblioteca["prestamos"][usuario] = {
-                "Fecha": datetime.now().strftime("%Y-%m-%d"),
+                "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
                 "Libros": [libro_nombre],
                 "MultaPendiente": 0,
             }
@@ -476,42 +487,43 @@ def main():
     while True:
         print("\n---- MENÚ PRINCIPAL ----")
         print("1. Ver libros disponibles")
-        print("2. Prestar libro")
-        print("3. Devolver libro")
-        print("4. Agregar libro")
-        print("5. Modificar libro")
-        print("6. Eliminar libro")
+        print("2. Agregar libro")
+        print("3. Modificar libro")
+        print("4. Eliminar libro")
+        print("5. Prestar libro")
+        print("6. Devolver libro")
         print("7. Visualizar préstamos y multas")
         print("8. Pagar multa")
         print("9. Administración manual de préstamos")
-        print("0. Salir")
+        print("10. Salir")
 
         opcion = input("\nElige una opción: ").strip()
 
         if opcion == "1":
             mostrar_libros(biblioteca)
         elif opcion == "2":
-            prestar_libro(biblioteca)
-        elif opcion == "3":
-            devolver_libro(biblioteca)
-        elif opcion == "4":
             agregar_libro(biblioteca)
-        elif opcion == "5":
+        elif opcion == "3":
             modificar_libro(biblioteca)
-        elif opcion == "6":
+        elif opcion == "4":
             eliminar_libro(biblioteca)
+        elif opcion == "5":
+            prestar_libro(biblioteca)
+        elif opcion == "6":
+            devolver_libro(biblioteca)
         elif opcion == "7":
             visualizar_prestamos(biblioteca)
         elif opcion == "8":
             pagar_multa(biblioteca)
         elif opcion == "9":
             administrar_prestamos_manual(biblioteca)
-        elif opcion == "0":
+        elif opcion == "10":
+            # Guardar cambios y salir
             guardar_datos(biblioteca)
             print("Saliendo del sistema...")
             break
         else:
-            print("Opción inválida.")
+            print("Opción inválida. Por favor ingresa un número entre 1 y 10.")
 
         # Guardar después de cada operación
         guardar_datos(biblioteca)
