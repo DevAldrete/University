@@ -1,0 +1,46 @@
+{
+    "libros": {
+        "689c5a37-70ee-4a87-a06f-6b0078ded168": {
+            "Nombre": "Dracula",
+            "Disponible": true,
+            "Cantidad": 2
+        },
+        "0906f35c-5098-4e80-bac8-705ca99eecae": {
+            "Nombre": "El Principito",
+            "Disponible": true,
+            "Cantidad": 4
+        },
+        "20dd8921-7b54-4b7d-bb9e-3e3456443f53": {
+            "Nombre": "Cien años de soledad",
+            "Disponible": true,
+            "Cantidad": 3
+        },
+        "b1db5997-3dec-4eb1-b55e-2603d501a676": {
+            "Nombre": "Alicia en el país de las maravillas",
+            "Disponible": true,
+            "Cantidad": 5
+        },
+        "df67e943-b0cc-40d0-a823-e9cac0bb39a4": {
+            "Nombre": "Dracula II",
+            "Disponible": true,
+            "Cantidad": 2
+        }
+    },
+    "prestamos": {
+        "User1": {
+            "Fecha": "2025-09-10 08:55",
+            "Libros": [
+                "Dracula II",
+                "El Principito"
+            ],
+            "MultaPendiente": 0
+        },
+        "Daniel": {
+            "Fecha": "2025-09-10 09:55",
+            "Libros": [
+                "Dracula"
+            ],
+            "MultaPendiente": 0
+        }
+    }
+}
