@@ -1,231 +1,204 @@
 {
-    "libros": {
-        "689c5a37-70ee-4a87-a06f-6b0078ded168": {
-            "Nombre": "Dracula",
-            "Disponible": true,
-            "Cantidad": 3
+    "libros": [
+        {
+            "id": "b001",
+            "nombre": "Dracula",
+            "disponible": true,
+            "cantidad": 3
         },
-        "0906f35c-5098-4e80-bac8-705ca99eecae": {
-            "Nombre": "El Principito",
-            "Disponible": true,
-            "Cantidad": 4
+        {
+            "id": "b002",
+            "nombre": "El Principito",
+            "disponible": true,
+            "cantidad": 4
         },
-        "20dd8921-7b54-4b7d-bb9e-3e3456443f53": {
-            "Nombre": "Cien años de soledad",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b003",
+            "nombre": "Cien años de soledad",
+            "disponible": true,
+            "cantidad": 3
         },
-        "b1db5997-3dec-4eb1-b55e-2603d501a676": {
-            "Nombre": "Alicia en el país de las maravillas",
-            "Disponible": true,
-            "Cantidad": 5
+        {
+            "id": "b004",
+            "nombre": "Alicia en el país de las maravillas",
+            "disponible": true,
+            "cantidad": 5
         },
-        "df67e943-b0cc-40d0-a823-e9cac0bb39a4": {
-            "Nombre": "Dracula II",
-            "Disponible": true,
-            "Cantidad": 1
+        {
+            "id": "b005",
+            "nombre": "Dracula II",
+            "disponible": true,
+            "cantidad": 1
         },
-        "a00001": {
-            "Nombre": "La Odisea",
-            "Disponible": true,
-            "Cantidad": 4
+        {
+            "id": "b006",
+            "nombre": "La Odisea",
+            "disponible": true,
+            "cantidad": 4
         },
-        "a00002": {
-            "Nombre": "Hamlet",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b007",
+            "nombre": "Hamlet",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00003": {
-            "Nombre": "Macbeth",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b008",
+            "nombre": "Macbeth",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a00004": {
-            "Nombre": "Crónica de una muerte anunciada",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b009",
+            "nombre": "Crónica de una muerte anunciada",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00005": {
-            "Nombre": "El laberinto de la soledad",
-            "Disponible": true,
-            "Cantidad": 4
+        {
+            "id": "b011",
+            "nombre": "Rayuela",
+            "disponible": true,
+            "cantidad": 5
         },
-        "a00006": {
-            "Nombre": "Rayuela",
-            "Disponible": true,
-            "Cantidad": 5
+        {
+            "id": "b012",
+            "nombre": "Pedro Páramo",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a00007": {
-            "Nombre": "Pedro Páramo",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b013",
+            "nombre": "La Tregua",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00008": {
-            "Nombre": "La Tregua",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b014",
+            "nombre": "Ficciones",
+            "disponible": true,
+            "cantidad": 4
         },
-        "a00009": {
-            "Nombre": "Ficciones",
-            "Disponible": true,
-            "Cantidad": 4
+        {
+            "id": "b015",
+            "nombre": "El amor en los tiempos del cólera",
+            "disponible": true,
+            "cantidad": 1
         },
-        "a0000A": {
-            "Nombre": "El amor en los tiempos del cólera",
-            "Disponible": true,
-            "Cantidad": 1
+        {
+            "id": "b016",
+            "nombre": "El túnel",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a0000B": {
-            "Nombre": "El túnel",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b017",
+            "nombre": "Los renglones torcidos de Dios",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a0000C": {
-            "Nombre": "Los renglones torcidos de Dios",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b018",
+            "nombre": "1984",
+            "disponible": true,
+            "cantidad": 6
         },
-        "a0000D": {
-            "Nombre": "1984",
-            "Disponible": true,
-            "Cantidad": 6
+        {
+            "id": "b019",
+            "nombre": "Brave New World",
+            "disponible": true,
+            "cantidad": 4
         },
-        "a0000E": {
-            "Nombre": "Brave New World",
-            "Disponible": true,
-            "Cantidad": 4
+        {
+            "id": "b020",
+            "nombre": "Matar a un ruiseñor",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a0000F": {
-            "Nombre": "Matar a un ruiseñor",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b021",
+            "nombre": "El gran Gatsby",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a00010": {
-            "Nombre": "El gran Gatsby",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b022",
+            "nombre": "Orgullo y prejuicio",
+            "disponible": true,
+            "cantidad": 5
         },
-        "a00011": {
-            "Nombre": "Orgullo y prejuicio",
-            "Disponible": true,
-            "Cantidad": 5
+        {
+            "id": "b023",
+            "nombre": "Moby Dick",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a00012": {
-            "Nombre": "Moby Dick",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b024",
+            "nombre": "Ubik",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00013": {
-            "Nombre": "Ubik",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b025",
+            "nombre": "Don Juan Tenorio",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00014": {
-            "Nombre": "Don Juan Tenorio",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b026",
+            "nombre": "Los miserables",
+            "disponible": true,
+            "cantidad": 4
         },
-        "a00015": {
-            "Nombre": "Los miserables",
-            "Disponible": true,
-            "Cantidad": 4
+        {
+            "id": "b027",
+            "nombre": "La divina comedia",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00016": {
-            "Nombre": "La divina comedia",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "b028",
+            "nombre": "Crimen y castigo",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a00017": {
-            "Nombre": "Crimen y castigo",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b029",
+            "nombre": "Anna Karenina",
+            "disponible": true,
+            "cantidad": 3
         },
-        "a00018": {
-            "Nombre": "Anna Karenina",
-            "Disponible": true,
-            "Cantidad": 3
+        {
+            "id": "a00019",
+            "nombre": "Guerra y paz",
+            "disponible": true,
+            "cantidad": 2
         },
-        "a00019": {
-            "Nombre": "Guerra y paz",
-            "Disponible": true,
-            "Cantidad": 2
+        {
+            "id": "b031",
+            "nombre": "El Principito II",
+            "disponible": true,
+            "cantidad": 5
         },
-        "a00020": {
-            "Nombre": "El Principito II",
-            "Disponible": true,
-            "Cantidad": 5
+        {
+            "id": "c8700efd-0520-4b4d-8a84-9d8b0b1feef6",
+            "nombre": "Unity Guide for Professionals",
+            "disponible": true,
+            "cantidad": 2
         }
-    },
-    "prestamos": {
-        "User1": {
-            "Libros": [
-                {
-                    "Nombre": "Dracula II",
-                    "Fecha": "2025-09-10 09:55",
-                    "FechaDevolucion": "2025-09-24 09:55"
-                },
-                {
-                    "Nombre": "El Principito",
-                    "Fecha": "2025-08-10 10:23",
-                    "FechaDevolucion": "2025-08-24 10:23"
-                }
-            ],
-            "MultaPendiente": 410.0
+    ],
+    "usuarios": [
+        {
+            "id": "e497e029-6bde-46af-a9d5-d3a280584124",
+            "nombre": "Karl",
+            "libros": [],
+            "multa_pendiente": 0.0
         },
-        "Daniel": {
-            "Libros": [
-                {
-                    "Nombre": "Dracula",
-                    "Fecha": "2025-09-10 09:55",
-                    "FechaDevolucion": "2025-09-24 09:55"
-                },
-                {
-                    "Nombre": "Dracula II",
-                    "Fecha": "2025-09-10 09:55",
-                    "FechaDevolucion": "2025-09-24 09:55"
-                }
-            ],
-            "MultaPendiente": 0
-        },
-        "Alice": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Bob": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Carol": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Dave": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Eve": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Frank": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Grace": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Heidi": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Ivan": {
-            "Libros": [],
-            "MultaPendiente": 0
-        },
-        "Judy": {
-            "Libros": [],
-            "MultaPendiente": 0
+        {
+            "id": "3142589b-f95e-4d12-907b-749c2ba65fa2",
+            "nombre": "Daniel",
+            "libros": [],
+            "multa_pendiente": 0.0
         }
-    }
+    ]
 }

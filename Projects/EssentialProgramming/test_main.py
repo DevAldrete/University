@@ -1,5 +1,3 @@
-import json
-from pprint import pprint
+from pendulum import now
 
-with open("biblioteca.json", "r") as file:
-    pprint(json.load(file))
+print(now())

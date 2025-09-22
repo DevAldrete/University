@@ -1,532 +1,680 @@
 """
-Sistema de gestión de préstamos de libros en una biblioteca escolar
+Sistema de gestión de préstamos de libros en una biblioteca escolar.
 
-Mejoras incluidas:
-- IDs cortos y autocompletado por prefijo de ID.
+Este script implementa una solución completa para la administración de una
+biblioteca, permitiendo gestionar un catálogo de libros y el préstamo de
+estos a usuarios.
+
+Caracteristicas
+- Búsqueda por prefijo de ID para libros y usuarios.
+- Modificación de datos de libros y usuarios.
 - Visualización de préstamos con cálculo de multas ($15/día después de 7 días).
-- Límite de 4 libros por usuario.
-- Administración manual de préstamos (forzar agregar/quitar).
+- Límite de 3 libros por usuario.
 - Bloqueo de nuevos préstamos si el usuario tiene multa pendiente.
-- Opción para pagar multas.
-- Persistencia en un solo JSON: {"libros": {...}, "prestamos": {...}}.
-
-Notas de diseño:
-- Fecha de préstamo por usuario: se considera la más antigua relevante para calcular multa (modelo simple).
-- MultaPendiente: se actualiza dinámicamente y puede guardarse para referencia al visualizar (se recalcula al entrar a visualizar o al intentar prestar).
+- Opción para pagar multas y actualizar datos manualmente.
+- Persistencia de datos en un único archivo JSON.
 """
 
-import json  # Lectura/escritura del archivo JSON: serializa objetos Python a texto JSON y viceversa
-import uuid  # Generación de identificadores únicos (UUID) para libros
-from datetime import (
-    datetime,
-    timedelta,
-)  # datetime: manipulación de fechas y horas; timedelta: diferencia entre fechas
+import json
+from typing import Dict, List, Any, Optional
+import uuid
+import pendulum as pm
+from pydantic import BaseModel, Field
 
 # --- Constantes de configuración ---
 RUTA_JSON = "biblioteca.json"  # Archivo JSON de almacenamiento
 DIAS_PRESTAMO = 7  # Días sin multa
-MULTA_POR_DIA = 15  # Multa en pesos mexicanos por día de retraso
-LIMITE_LIBROS = 4  # Máximo de libros por usuario
-
-# --- Utilidades de persistencia ---
+MULTA_POR_DIA = 15.0  # Multa en pesos mexicanos por día de retraso
+LIMITE_LIBROS = 3  # Máximo de libros por usuario
 
 
-def cargar_datos():
+# --- Modelos de Datos (Pydantic) ---
+
+
+class Libro(BaseModel):
     """
-    Carga los datos desde el archivo JSON. Si no existe, crea la estructura base.
-    Estructura:
-    {
-        "libros": {
-            "abc123": {"Nombre": "Drácula", "Disponible": true, "Cantidad": 3},
-            ...
-        },
-        "prestamos": {
-            "UsuarioX": {"Fecha": "YYYY-MM-DD", "Libros": ["Drácula", ...], "MultaPendiente": 0}
-        }
-    }
+    Representa un libro en el catálogo de la biblioteca.
+
+    Atributos:
+        id (str): Identificador único del libro.
+        nombre (str): Título del libro.
+        disponible (bool): True si hay al menos una copia disponible.
+        cantidad (int): Número de copias existentes de este libro.
     """
-    try:
-        with open(RUTA_JSON, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            # Asegurar campos mínimos
-            if "libros" not in data:
-                data["libros"] = {}
-            if "prestamos" not in data:
-                data["prestamos"] = {}
-            # Normalizar estructura de prestamos (asegurar MultaPendiente)
-            for u, p in data["prestamos"].items():
-                if "MultaPendiente" not in p:
-                    p["MultaPendiente"] = 0
-            return data
-    except FileNotFoundError:
-        return {"libros": {}, "prestamos": {}}
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nombre: str
+    disponible: bool
+    cantidad: int
 
 
-def guardar_datos(biblioteca):
-    """Guarda el estado completo en el JSON con indentación legible y soporte de acentos."""
-    with open(RUTA_JSON, "w", encoding="utf-8") as f:
-        json.dump(biblioteca, f, ensure_ascii=False, indent=4)
-
-
-# --- Utilidades de IDs ---
-
-
-def generar_id_corto():
+class Prestamo(Libro):
     """
-    Genera un ID corto de 6 caracteres tomando el prefijo de un uuid4.
-    Ventaja: suficientemente único para inventarios pequeños/medianos y fácil de teclear.
+    Representa un libro que ha sido prestado a un usuario.
+    Hereda de Libro y añade las fechas de préstamo y devolución.
+
+    Atributos:
+        fecha (str): Fecha y hora del préstamo en formato ISO 8601.
+        fecha_devolucion (str): Fecha y hora límite para la devolución.
     """
-    return str(uuid.uuid4())[:6]
+
+    fecha: str
+    fecha_devolucion: str
 
 
-def autocompletar_id(biblioteca, id_parcial):
+class Usuario(BaseModel):
     """
-    Autocompleta un ID de libro a partir de su prefijo.
-    - Si hay coincidencia única: devuelve el ID completo.
-    - Si hay múltiples: muestra opciones y devuelve None (para reintento).
-    - Si no hay coincidencias: devuelve None.
+    Representa a un usuario de la biblioteca.
+
+    Atributos:
+        id (str): Identificador único del usuario.
+        nombre (str): Nombre del usuario.
+        libros (List[Prestamo]): Lista de libros que el usuario tiene en préstamo.
+        multa_pendiente (float): Monto total de la multa acumulada.
     """
-    coincidencias = [lid for lid in biblioteca["libros"] if lid.startswith(id_parcial)]
-    if len(coincidencias) == 1:
-        return coincidencias[0]
-    elif len(coincidencias) > 1:
-        print("Coincidencias encontradas:")
-        for cid in coincidencias:
-            print(f"{cid} | {biblioteca['libros'][cid]['Nombre']}")
-        return None
-    else:
-        return None
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    nombre: str
+    libros: List[Prestamo] = []
+    multa_pendiente: float = 0.0
 
 
-# --- Lógica de multas ---
+# --- Lógica de la Biblioteca ---
 
 
-def calcular_multa(fecha_str):
+class Biblioteca:
     """
-    Calcula la multa a partir de una fecha de préstamo (YYYY-MM-DD).
-    - Se considera fecha límite = fecha_prestamo + DIAS_PRESTAMO.
-    - Si hoy > fecha_límite: multa = días_retraso * MULTA_POR_DIA
-    - Si no hay retraso: 0
+    Clase principal que gestiona todas las operaciones de la biblioteca,
+    incluyendo el catálogo de libros y los préstamos a usuarios.
     """
-    # Deprecated: mantiene compatibilidad con estructura antigua de fecha de préstamo
-    fecha_prestamo = datetime.strptime(fecha_str, "%Y-%m-%d %H:%M") if len(fecha_str) > 10 else datetime.strptime(fecha_str, "%Y-%m-%d")
-    fecha_limite = fecha_prestamo + timedelta(days=DIAS_PRESTAMO)
-    dias_retraso = (datetime.now().date() - fecha_limite.date()).days
-    return max(0, dias_retraso * MULTA_POR_DIA)
 
-
-# Cálculo de multa basado en fecha de devolución de cada libro
-def calcular_multa_libro(book):
-    """
-    Dado un diccionario book con FechaDevolucion "YYYY-MM-DD HH:MM", retorna multa si hay retraso.
-    """
-    fecha_limite = datetime.strptime(book["FechaDevolucion"], "%Y-%m-%d %H:%M")
-    dias_retraso = (datetime.now() - fecha_limite).days
-    return max(0, dias_retraso * MULTA_POR_DIA)
-
-
-def actualizar_multas(biblioteca):
-    """
-    Recalcula y actualiza MultaPendiente para todos los usuarios con préstamos activos.
-    Regla: Multa se calcula contra la fecha del registro del usuario (modelo simple).
-    """
-    # Recalcula MultaPendiente sumando multas de cada libro activo
-    for usuario, datos in biblioteca["prestamos"].items():
-        total = 0
-        for book in datos.get("Libros", []):
-            total += calcular_multa_libro(book)
-        datos["MultaPendiente"] = total
-
-
-# --- Vistas e inventario ---
-
-
-def mostrar_libros(biblioteca):
-    """
-    Muestra libros con cantidad disponible > 0.
-    Se imprime: ID | Nombre (Cantidad: N)
-    """
-    print("\n--- Libros Disponibles ---")
-    disponibles = False
-    for libro_id, datos in biblioteca["libros"].items():
-        if datos["Cantidad"] > 0:
-            disponibles = True
-            print(f"{libro_id} | {datos['Nombre']} (Cantidad: {datos['Cantidad']})")
-    if not disponibles:
-        print("No hay libros disponibles.")
-
-
-def agregar_libro(biblioteca):
-    """
-    Agrega un libro nuevo:
-    - Pide nombre y cantidad.
-    - Evita duplicados por nombre (insensible a mayúsculas).
-    - Genera ID corto y marca disponibilidad según cantidad.
-    """
-    nombre = input("\nTítulo del nuevo libro: ").strip()
-    try:
-        cantidad = int(input("Cantidad de ejemplares: ").strip())
-    except ValueError:
-        print("Cantidad inválida.")
-        return
-
-    for datos in biblioteca["libros"].values():
-        if datos["Nombre"].lower() == nombre.lower():
-            print("Ese libro ya existe en el inventario.")
-            return
-
-    libro_id = generar_id_corto()
-    biblioteca["libros"][libro_id] = {
-        "Nombre": nombre,
-        "Disponible": cantidad > 0,
-        "Cantidad": cantidad,
-    }
-    print(f"Libro '{nombre}' agregado con ID {libro_id}.")
-
-
-def modificar_libro(biblioteca):
-    """
-    Modifica nombre y/o cantidad de un libro existente.
-    - Autocompleta ID por prefijo.
-    - Actualiza la disponibilidad automáticamente con base en la cantidad.
-    """
-    id_parcial = input("\nID (o parte del ID) del libro a modificar: ").strip()
-    libro_id = autocompletar_id(biblioteca, id_parcial)
-    if not libro_id:
-        print("No se encontró un libro con ese ID.")
-        return
-
-    nuevo_nombre = input("Nuevo título (vacío para no cambiar): ").strip()
-    nueva_cantidad = input("Nueva cantidad (vacío para no cambiar): ").strip()
-
-    if nuevo_nombre:
-        biblioteca["libros"][libro_id]["Nombre"] = nuevo_nombre
-    if nueva_cantidad:
-        try:
-            cantidad = int(nueva_cantidad)
-        except ValueError:
-            print("Cantidad inválida. No se realizaron cambios en cantidad.")
+    def __init__(self) -> None:
+        """
+        Inicializa la biblioteca, cargando los datos desde el archivo JSON
+        si existe.
+        """
+        self.libros: List[Libro] = []
+        self.usuarios: List[Usuario] = []
+        if datos := self.cargar_datos():
+            self.libros = [
+                Libro.model_validate(libro) for libro in datos.get("libros", [])
+            ]
+            self.usuarios = [
+                Usuario.model_validate(usuario) for usuario in datos.get("usuarios", [])
+            ]
         else:
-            biblioteca["libros"][libro_id]["Cantidad"] = cantidad
-            biblioteca["libros"][libro_id]["Disponible"] = cantidad > 0
+            print(
+                "No se encontró un archivo de datos, se iniciará una biblioteca nueva."
+            )
 
-    print("Libro modificado.")
+    def cargar_datos(self) -> Optional[Dict[str, Any]]:
+        """
+        Carga los datos de la biblioteca desde un archivo JSON.
 
+        Retorna:
+            Un diccionario con los datos si el archivo existe y es válido,
+            o None si ocurre un error.
+        """
+        try:
+            with open(RUTA_JSON, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return None
+        except json.JSONDecodeError:
+            print("Error: El archivo JSON está corrupto o mal formateado.")
+            return None
 
-def eliminar_libro(biblioteca):
-    """
-    Elimina un libro del inventario.
-    - No permite eliminar si algún usuario lo tiene prestado (por nombre).
-    """
-    id_parcial = input("\nID (o parte del ID) del libro a eliminar: ").strip()
-    libro_id = autocompletar_id(biblioteca, id_parcial)
-    if not libro_id:
-        print("No se encontró un libro con ese ID.")
-        return
+    def guardar_datos(self) -> None:
+        """
+        Guarda el estado actual de la biblioteca (libros y usuarios)
+        en el archivo JSON.
+        """
+        try:
+            with open(RUTA_JSON, "w", encoding="utf-8") as f:
+                datos = {
+                    "libros": [libro.model_dump() for libro in self.libros],
+                    "usuarios": [usuario.model_dump() for usuario in self.usuarios],
+                }
+                json.dump(datos, f, indent=4, ensure_ascii=False)
+        except IOError as e:
+            print(f"Error al intentar guardar los datos en el archivo: {e}")
 
-    nombre_libro = biblioteca["libros"][libro_id]["Nombre"]
-    for prestamo in biblioteca["prestamos"].values():
-        for book in prestamo.get("Libros", []):
-            if isinstance(book, dict) and book.get("Nombre") == nombre_libro:
-                print("No se puede eliminar un libro que está prestado.")
-                return
+    # --- Métodos de Gestión de Libros ---
+    def agregar_libro(self, nombre: str, cantidad: int) -> None:
+        """
+        Agrega un nuevo libro al catálogo o incrementa la cantidad si ya existe.
 
-    del biblioteca["libros"][libro_id]
-    print("Libro eliminado.")
-
-
-# --- Préstamos ---
-
-
-def prestar_libro(biblioteca):
-    """
-    Registra un préstamo por cada libro:
-    - Autocompleta ID de libro.
-    - Verifica stock, límite de libros y multas pendientes.
-    - Descuenta inventario y guarda Fecha y FechaDevolucion por registro.
-    - Persistencia en JSON con estructura detallada.
-    """
-    usuario = input("\nNombre del usuario: ").strip()
-    # Recalcular multas para bloquear préstamo si hay deudas
-    actualizar_multas(biblioteca)
-    if usuario in biblioteca["prestamos"] and biblioteca["prestamos"][usuario].get("MultaPendiente", 0) > 0:
-        print(f"Préstamo bloqueado: multa pendiente de ${biblioteca['prestamos'][usuario]['MultaPendiente']} MXN")
-        return
-    # Selección de libro por ID parcial
-    id_parcial = input("ID (o parte del ID) del libro a prestar: ").strip()
-    libro_id = autocompletar_id(biblioteca, id_parcial)
-    if not libro_id:
-        print("No se encontró un libro con ese ID.")
-        return
-    libro = biblioteca["libros"][libro_id]
-    if libro["Cantidad"] <= 0:
-        print("No hay ejemplares disponibles.")
-        return
-    # Verificar límite de préstamos activos
-    actuales = len(biblioteca.get("prestamos", {}).get(usuario, {}).get("Libros", []))
-    if actuales >= LIMITE_LIBROS:
-        print(f"Límite de {LIMITE_LIBROS} libros alcanzado para {usuario}.")
-        return
-    # Actualizar inventario
-    libro["Cantidad"] -= 1
-    libro["Disponible"] = libro["Cantidad"] > 0
-    # Registrar préstamo con fecha de inicio y fecha de devolución por libro
-    now = datetime.now()
-    registro = {
-        "Nombre": libro["Nombre"],
-        "Fecha": now.strftime("%Y-%m-%d %H:%M"),
-        "FechaDevolucion": (now + timedelta(days=DIAS_PRESTAMO)).strftime("%Y-%m-%d %H:%M")
-    }
-    if usuario not in biblioteca["prestamos"]:
-        biblioteca["prestamos"][usuario] = {"Libros": [registro], "MultaPendiente": 0}
-    else:
-        biblioteca["prestamos"][usuario]["Libros"].append(registro)
-    # Inicialmente sin multa en préstamos recién hechos
-    actualizar_multas(biblioteca)
-    print(f"Préstamo registrado: '{libro['Nombre']}' para usuario {usuario}.")
-
-
-def devolver_libro(biblioteca):
-    """
-    Registra la devolución:
-    - Valida que el usuario y el libro existan en sus préstamos.
-    - Incrementa inventario y marca disponible.
-    - Si el usuario se queda sin libros, se mantiene su MultaPendiente para pago.
-    """
-    usuario = input("\nNombre del usuario: ").strip()
-    libro_nombre = input("Título del libro a devolver: ").strip()
-
-    if usuario not in biblioteca["prestamos"]:
-        print("Este usuario no tiene préstamos.")
-        return
-
-    # Validar que el libro esté prestado (buscar en registros por Nombre)
-    prestamos_usuario = biblioteca["prestamos"][usuario].get("Libros", [])
-    if not any(b.get("Nombre", "").lower() == libro_nombre.lower() for b in prestamos_usuario):
-        print("Ese libro no está registrado como prestado a este usuario.")
-        return
-
-    # Devolver al inventario (buscar por nombre)
-    for _, datos in biblioteca["libros"].items():
-        if datos["Nombre"] == libro_nombre:
-            datos["Cantidad"] += 1
-            datos["Disponible"] = True
-            break
-
-    # Devolver al inventario (buscar por nombre y luego eliminar registro detallado)
-
-    # Encontrar y remover la entrada de libro, calcular multa si hay retraso
-    removed = None
-    for book in prestamos_usuario:
-        if book.get("Nombre", "").lower() == libro_nombre.lower():
-            removed = book
-            break
-    if removed:
-        multa_libro = calcular_multa_libro(removed)
-        biblioteca["prestamos"][usuario]["MultaPendiente"] = biblioteca["prestamos"][usuario].get("MultaPendiente", 0) + multa_libro
-        prestamos_usuario.remove(removed)
-        print(f"Multa generada por este libro: ${multa_libro} MXN")
-    # Verificar si sin libros y sin multa, limpiar registro
-    if usuario in biblioteca["prestamos"] and not biblioteca["prestamos"][usuario]["Libros"] and biblioteca["prestamos"][usuario]["MultaPendiente"] == 0:
-        del biblioteca["prestamos"][usuario]
-    print(f"El usuario '{usuario}' ha devuelto '{libro_nombre}'.")
-
-
-def visualizar_prestamos(biblioteca):
-    """
-    Muestra todos los préstamos:
-    - Usuario, Fecha de préstamo, Libros, Fecha límite, Días de retraso y Multa.
-    - Recalcula multas al vuelo para mostrar información actualizada.
-    """
-    print("\n--- Préstamos y multas ---")
-    if not biblioteca["prestamos"]:
-        print("No hay préstamos registrados.")
-        return
-
-    actualizar_multas(biblioteca)
-
-    for usuario, datos in biblioteca["prestamos"].items():
-        print(f"\nUsuario: {usuario}")
-        if not datos.get("Libros"):  # Sin préstamos activos
-            print("(Sin préstamos activos)")
-            print(f"Multa pendiente: ${datos.get('MultaPendiente', 0)} MXN")
-            continue
-        total = 0
-        for book in datos["Libros"]:
-            fecha_lim = datetime.strptime(book["FechaDevolucion"], "%Y-%m-%d %H:%M")
-            dias_retraso = max(0, (datetime.now() - fecha_lim).days)
-            multa = calcular_multa_libro(book)
-            print(f"- '{book['Nombre']}': préstamo {book['Fecha']} | vence {book['FechaDevolucion']} | retraso {dias_retraso} días | multa ${multa} MXN")
-            total += multa
-        print(f"Total multa en préstamos activos: ${total} MXN")
-        print(f"Multa pendiente acumulada: ${datos.get('MultaPendiente', 0)} MXN")
-
-
-def pagar_multa(biblioteca):
-    """
-    Permite registrar el pago de multas de un usuario.
-    - Si hay importe pendiente, se puede pagar total o parcial.
-    - Si el pago excede, se ajusta a 0.
-    - Tras pagar completamente, el usuario puede volver a pedir préstamos.
-    """
-    usuario = input("\nNombre del usuario a pagar multa: ").strip()
-    if usuario not in biblioteca["prestamos"]:
-        print("Este usuario no tiene registro de préstamos/multas.")
-        return
-
-    # Calcular multa total: deudas anteriores + multas por préstamos activos
-    datos_usuario = biblioteca["prestamos"][usuario]
-    # Fines provenientes de préstamos activos
-    multas_activas = sum(calcular_multa_libro(book) for book in datos_usuario.get("Libros", []))
-    # Deudas previas de libros ya devueltos almacenadas en MultaPendiente
-    deudas_previas = datos_usuario.get("MultaPendiente", 0)
-    saldo = multas_activas + deudas_previas
-
-    if saldo <= 0:
-        print("El usuario no tiene multa pendiente.")
-        return
-
-    print(f"Multa pendiente: ${saldo} MXN")
-    try:
-        pago = float(input("Monto a pagar: ").strip())
-    except ValueError:
-        print("Monto inválido.")
-        return
-
-    nuevo_saldo = max(0, saldo - pago)
-    # Registrar nuevo monto pendiente
-    datos_usuario["MultaPendiente"] = nuevo_saldo
-    print(f"Pago registrado. Multa restante: ${nuevo_saldo} MXN")
-
-    # Si el usuario ya no tiene libros y la multa quedó en 0, se puede limpiar su registro
-    if not biblioteca["prestamos"][usuario]["Libros"] and nuevo_saldo == 0:
-        del biblioteca["prestamos"][usuario]
-        print("Registro del usuario limpiado (sin libros ni multas).")
-
-
-def administrar_prestamos_manual(biblioteca):
-    """
-    Administración manual de préstamos (modo forzado):
-    - Agregar/quitar un libro por nombre directo en la lista del usuario.
-    - Opcionalmente forzar (ignorar inventario y límite) bajo responsabilidad del operador.
-    - Útil para corregir inconsistencias o migraciones.
-    """
-    usuario = input("\nNombre del usuario: ").strip()
-    accion = input("¿Agregar o quitar libro? (a/q): ").strip().lower()
-    libro_nombre = input("Título del libro: ").strip()
-    forzar = (
-        input("¿Forzar operación ignorando límite e inventario? (s/n): ")
-        .strip()
-        .lower()
-        == "s"
-    )
-
-    if accion == "a":
-        # Verificar límite si NO se forza
-        if not forzar and usuario in biblioteca["prestamos"]:
-            if len(biblioteca["prestamos"][usuario]["Libros"]) >= LIMITE_LIBROS:
+        Args:
+            nombre (str): El nombre del libro a agregar.
+            cantidad (int): El número de copias a agregar.
+        """
+        for libro in self.libros:
+            if libro.nombre.lower() == nombre.lower():
+                libro.cantidad += cantidad
+                libro.disponible = libro.cantidad > 0
                 print(
-                    f"Límite de {LIMITE_LIBROS} libros alcanzado (usa modo forzado para bypass)."
+                    f"Se agregaron {cantidad} copias de '{nombre}'. Cantidad total: {libro.cantidad}."
                 )
                 return
-        # Asegurar estructura del usuario
-        if usuario not in biblioteca["prestamos"]:
-            # Registrar manual con fecha y hora actual
-            biblioteca["prestamos"][usuario] = {
-                "Fecha": datetime.now().strftime("%Y-%m-%d %H:%M"),
-                "Libros": [libro_nombre],
-                "MultaPendiente": 0,
-            }
+
+        nuevo_libro = Libro(nombre=nombre, cantidad=cantidad, disponible=cantidad > 0)
+        self.libros.append(nuevo_libro)
+        print(f"Libro '{nombre}' agregado al catálogo con {cantidad} copias.")
+
+    def obtener_libro(self, libro_id: str) -> Optional[Libro]:
+        """
+        Busca un libro en el catálogo por su ID.
+
+        Args:
+            libro_id (str): El ID del libro a buscar.
+
+        Retorna:
+            El objeto Libro si se encuentra, de lo contrario None.
+        """
+        for libro in self.libros:
+            if libro.id == libro_id:
+                return libro
+        return None
+
+    def modificar_libro(self, libro_id: str) -> bool:
+        """
+        Modifica la información de un libro existente en el catálogo.
+
+        Args:
+            libro_id (str): El ID del libro a modificar.
+
+        Returns:
+            True si el libro se modificó con éxito, False en caso contrario.
+        """
+        libro = self.obtener_libro(libro_id)
+        if not libro:
+            print("Error: No se encontró un libro con ese ID.")
+            return False
+
+        print(
+            f"Modificando libro: '{libro.nombre}' (Cantidad actual: {libro.cantidad})"
+        )
+
+        nuevo_nombre = input(
+            f"Nuevo nombre (deja en blanco para mantener '{libro.nombre}'): "
+        ).strip()
+        if nuevo_nombre:
+            libro.nombre = nuevo_nombre
+            print(f"Nombre del libro actualizado a '{libro.nombre}'.")
+
+        try:
+            nueva_cantidad_str = input(
+                f"Nueva cantidad (deja en blanco para mantener {libro.cantidad}): "
+            ).strip()
+            if nueva_cantidad_str:
+                nueva_cantidad = int(nueva_cantidad_str)
+                if nueva_cantidad < 0:
+                    print("Error: La cantidad no puede ser negativa.")
+                else:
+                    libro.cantidad = nueva_cantidad
+                    libro.disponible = libro.cantidad > 0
+                    print(f"Cantidad actualizada a {libro.cantidad}.")
+        except ValueError:
+            print("Entrada inválida. La cantidad no fue modificada.")
+
+        return True
+
+    def eliminar_libro(self, libro_id: str) -> bool:
+        """
+        Elimina un libro del catálogo por su ID.
+
+        Args:
+            libro_id (str): El ID del libro a eliminar.
+
+        Retorna:
+            True si el libro fue eliminado, False si no se encontró.
+        """
+        libro = self.obtener_libro(libro_id)
+        if libro:
+            self.libros.remove(libro)
+            print(f"Libro '{libro.nombre}' eliminado correctamente.")
+            return True
+        print("Error: No se encontró un libro con ese ID.")
+        return False
+
+    # --- Métodos de Gestión de Usuarios ---
+    def crear_usuario(self, nombre: str) -> Usuario:
+        """
+        Crea un nuevo usuario y lo añade a la lista de usuarios.
+
+        Args:
+            nombre (str): Nombre del nuevo usuario.
+
+        Retorna:
+            El objeto Usuario recién creado.
+        """
+        nuevo_usuario = Usuario(nombre=nombre)
+        self.usuarios.append(nuevo_usuario)
+        print(f"Usuario '{nombre}' creado con ID: {nuevo_usuario.id}")
+        return nuevo_usuario
+
+    def obtener_usuario(self, usuario_id: str) -> Optional[Usuario]:
+        """
+        Busca un usuario por su ID.
+
+        Args:
+            usuario_id (str): El ID del usuario a buscar.
+
+        Retorna:
+            El objeto Usuario si se encuentra, de lo contrario None.
+        """
+        for usuario in self.usuarios:
+            if usuario.id == usuario_id:
+                return usuario
+        return None
+
+    def modificar_usuario(self, usuario_id: str) -> bool:
+        """
+        Modifica el nombre de un usuario existente.
+
+        Args:
+            usuario_id (str): El ID del usuario a modificar.
+
+        Returns:
+            True si el usuario se modificó con éxito, False en caso contrario.
+        """
+        usuario = self.obtener_usuario(usuario_id)
+        if not usuario:
+            print("Error: No se encontró un usuario con ese ID.")
+            return False
+
+        print(f"Modificando usuario: '{usuario.nombre}'")
+        nuevo_nombre = input(
+            f"Nuevo nombre (deja en blanco para mantener '{usuario.nombre}'): "
+        ).strip()
+        if nuevo_nombre:
+            usuario.nombre = nuevo_nombre
+            print(f"Nombre del usuario actualizado a '{usuario.nombre}'.")
         else:
-            biblioteca["prestamos"][usuario]["Libros"].append(libro_nombre)
-        # Ajustar inventario si se encuentra el libro exacto por nombre y no es forzado
-        if not forzar:
-            for _, datos in biblioteca["libros"].items():
-                if datos["Nombre"].lower() == libro_nombre.lower():
-                    if datos["Cantidad"] > 0:
-                        datos["Cantidad"] -= 1
-                        datos["Disponible"] = datos["Cantidad"] > 0
-                    else:
-                        print(
-                            "Advertencia: inventario sin stock; operación manual aún aplicada al préstamo."
-                        )
-                    break
-        print(f"Libro '{libro_nombre}' agregado manualmente a {usuario}.")
+            print("No se realizaron cambios.")
+        return True
 
-    elif accion == "q":
-        if (
-            usuario in biblioteca["prestamos"]
-            and libro_nombre in biblioteca["prestamos"][usuario]["Libros"]
-        ):
-            biblioteca["prestamos"][usuario]["Libros"].remove(libro_nombre)
-            # Devolver a inventario si no es forzado
-            if not forzar:
-                for _, datos in biblioteca["libros"].items():
-                    if datos["Nombre"].lower() == libro_nombre.lower():
-                        datos["Cantidad"] += 1
-                        datos["Disponible"] = True
-                        break
-            print(f"Libro '{libro_nombre}' quitado manualmente de {usuario}.")
-            # Mantener registro del usuario para permitir pago de multa si aplica
+    # --- Métodos de Préstamos y Multas ---
+    def actualizar_multa(self, usuario: Usuario) -> None:
+        """
+        Calcula y actualiza la multa pendiente de un usuario basándose
+        en la fecha actual.
+
+        Args:
+            usuario (Usuario): El usuario cuya multa se va a calcular.
+        """
+        multa_total = 0.0
+        ahora = pm.now("America/Mexico_City")
+
+        for libro_prestado in usuario.libros:
+            fecha_devolucion = pm.parse(libro_prestado.fecha_devolucion)
+            if ahora > fecha_devolucion:
+                dias_retraso = (ahora - fecha_devolucion).in_days()
+                multa_total += dias_retraso * MULTA_POR_DIA
+
+        usuario.multa_pendiente = multa_total
+
+    def actualizar_todas_las_multas(self):
+        """
+        Recalcula las multas para todos los usuarios de la biblioteca.
+        """
+        if not self.usuarios:
+            print("No hay usuarios registrados para actualizar.")
+            return
+
+        print("Actualizando multas para todos los usuarios...")
+        for usuario in self.usuarios:
+            self.actualizar_multa(usuario)
+        print("¡Multas actualizadas!")
+
+    def prestar_libro(self, usuario_id: str, libro_id: str) -> bool:
+        """
+        Realiza el préstamo de un libro a un usuario.
+
+        Args:
+            usuario_id (str): El ID del usuario que solicita el préstamo.
+            libro_id (str): El ID del libro a prestar.
+
+        Retorna:
+            True si el préstamo fue exitoso, de lo contrario False.
+        """
+        usuario = self.obtener_usuario(usuario_id)
+        libro_catalogo = self.obtener_libro(libro_id)
+
+        if not usuario or not libro_catalogo:
+            print("Error: ID de usuario o libro no encontrado.")
+            return False
+
+        self.actualizar_multa(usuario)
+        if usuario.multa_pendiente > 0:
+            print(
+                f"Error: El usuario tiene una multa de ${usuario.multa_pendiente:.2f} y no puede solicitar préstamos."
+            )
+            return False
+
+        if len(usuario.libros) >= LIMITE_LIBROS:
+            print(
+                f"Error: El usuario ya ha alcanzado el límite de {LIMITE_LIBROS} libros prestados."
+            )
+            return False
+
+        if not libro_catalogo.disponible or libro_catalogo.cantidad <= 0:
+            print(f"Error: El libro '{libro_catalogo.nombre}' no está disponible.")
+            return False
+
+        libro_catalogo.cantidad -= 1
+        libro_catalogo.disponible = libro_catalogo.cantidad > 0
+
+        fecha_prestamo = pm.now("America/Mexico_City")
+        fecha_devolucion = fecha_prestamo.add(days=DIAS_PRESTAMO)
+
+        prestamo = Prestamo(
+            **libro_catalogo.model_dump(),
+            fecha=fecha_prestamo.to_iso8601_string(),
+            fecha_devolucion=fecha_devolucion.to_iso8601_string(),
+        )
+
+        usuario.libros.append(prestamo)
+        print(f"Préstamo exitoso: '{libro_catalogo.nombre}' a '{usuario.nombre}'.")
+        print(f"Fecha de devolución: {fecha_devolucion.format('DD-MM-YYYY')}.")
+        return True
+
+    def devolver_libro(self, usuario_id: str, libro_prestado_id: str) -> bool:
+        """
+        Registra la devolución de un libro por parte de un usuario.
+
+        Args:
+            usuario_id (str): El ID del usuario que devuelve el libro.
+            libro_prestado_id (str): El ID del libro que está siendo devuelto.
+
+        Retorna:
+            True si la devolución fue exitosa, de lo contrario False.
+        """
+        usuario = self.obtener_usuario(usuario_id)
+        if not usuario:
+            print("Error: ID de usuario no encontrado.")
+            return False
+
+        libro_a_devolver = next(
+            (lib for lib in usuario.libros if lib.id == libro_prestado_id), None
+        )
+
+        if not libro_a_devolver:
+            print("Error: El usuario no tiene prestado un libro con ese ID.")
+            return False
+
+        usuario.libros.remove(libro_a_devolver)
+        libro_catalogo = self.obtener_libro(libro_a_devolver.id)
+        if libro_catalogo:
+            libro_catalogo.cantidad += 1
+            libro_catalogo.disponible = True
         else:
-            print("No se encontró ese libro en los préstamos del usuario.")
-    else:
-        print("Opción inválida.")
+            self.libros.append(
+                Libro(
+                    id=libro_a_devolver.id,
+                    nombre=libro_a_devolver.nombre,
+                    cantidad=1,
+                    disponible=True,
+                )
+            )
+
+        print(
+            f"Devolución exitosa: '{libro_a_devolver.nombre}' por '{usuario.nombre}'."
+        )
+        self.actualizar_multa(usuario)
+        if usuario.multa_pendiente > 0:
+            print(
+                f"El usuario ahora tiene una multa pendiente de ${usuario.multa_pendiente:.2f}."
+            )
+        return True
+
+    def pagar_multa(self, usuario_id: str) -> bool:
+        """
+        Registra el pago de la multa de un usuario.
+
+        Args:
+            usuario_id (str): El ID del usuario que paga la multa.
+
+        Retorna:
+            True si el pago se registró, False si el usuario no se encontró.
+        """
+        usuario = self.obtener_usuario(usuario_id)
+        if not usuario:
+            print("Error: ID de usuario no encontrado.")
+            return False
+
+        self.actualizar_multa(usuario)
+        if usuario.multa_pendiente > 0:
+            print(
+                f"Se ha pagado la multa de ${usuario.multa_pendiente:.2f} para el usuario '{usuario.nombre}'."
+            )
+            usuario.multa_pendiente = 0.0
+        else:
+            print("El usuario no tiene multas pendientes.")
+        return True
 
 
-# --- Programa principal (menú) ---
+# --- Interfaz de Usuario por Consola (Menú) ---
+
+
+def _buscar_por_prefijo_id(lista_items: List[Any], prefijo: str) -> Optional[str]:
+    """
+    Busca un item (libro o usuario) por el prefijo de su ID.
+
+    Args:
+        lista_items (List[Any]): La lista de objetos (libros o usuarios) donde buscar.
+        prefijo (str): Los primeros caracteres del ID.
+
+    Returns:
+        El ID completo si se encuentra una única coincidencia.
+        None si no hay coincidencias o hay múltiples y el usuario no elige una.
+    """
+    coincidencias = [item for item in lista_items if item.id.startswith(prefijo)]
+
+    if not coincidencias:
+        print("No se encontró ningún item con ese prefijo de ID.")
+        return None
+
+    if len(coincidencias) == 1:
+        return coincidencias[0].id
+
+    print("Múltiples coincidencias encontradas. Por favor, especifica el ID completo:")
+    for item in coincidencias:
+        print(f"- ID: {item.id} | Nombre: {item.nombre}")
+    id_completo = input("Introduce el ID completo de la lista: ").strip()
+
+    # Verificamos que el ID completo esté en las coincidencias
+    for item in coincidencias:
+        if item.id == id_completo:
+            return id_completo
+
+    print("El ID introducido no es válido.")
+    return None
+
+
+def _seleccionar_item(biblioteca: Biblioteca, tipo_item: str) -> Optional[str]:
+    """
+    Función de ayuda genérica para mostrar y seleccionar un libro o usuario.
+
+    Args:
+        biblioteca (Biblioteca): La instancia de la biblioteca.
+        tipo_item (str): 'libro' o 'usuario'.
+
+    Returns:
+        El ID del item seleccionado o None.
+    """
+    if tipo_item == "libro":
+        items = biblioteca.libros
+        print("\n--- Catálogo de Libros ---")
+        if not items:
+            print("No hay libros en el catálogo.")
+            return None
+        for item in items:
+            estado = "Disponible" if item.disponible else "Agotado"
+            print(
+                f"- ID: {item.id} | Nombre: {item.nombre} | Cantidad: {item.cantidad} ({estado})"
+            )
+    else:  # usuario
+        items = biblioteca.usuarios
+        print("\n--- Lista de Usuarios ---")
+        if not items:
+            print("No hay usuarios registrados.")
+            return None
+        for item in items:
+            print(f"- ID: {item.id} | Nombre: {item.nombre}")
+
+    id_prefijo = input("Introduce el ID completo o los primeros caracteres: ").strip()
+    if not id_prefijo:
+        return None
+
+    return _buscar_por_prefijo_id(items, id_prefijo)
 
 
 def main():
     """
     Bucle principal de interacción por consola.
-    - Todas las operaciones persisten cambios inmediatamente.
+    Todas las operaciones persisten los cambios inmediatamente en el archivo JSON.
     """
-    biblioteca = cargar_datos()
+    biblioteca = Biblioteca()
 
     while True:
-        print("\n---- MENÚ PRINCIPAL ----")
-        print("1. Ver libros disponibles")
-        print("2. Agregar libro")
+        print("\n" + "=" * 25)
+        print("     MENÚ PRINCIPAL     ")
+        print("=" * 25)
+        print("--- GESTIÓN DE LIBROS ---")
+        print("1. Ver catálogo de libros")
+        print("2. Agregar libro al catálogo")
         print("3. Modificar libro")
-        print("4. Eliminar libro")
-        print("5. Prestar libro")
-        print("6. Devolver libro")
-        print("7. Visualizar préstamos y multas")
-        print("8. Pagar multa")
-        print("9. Administración manual de préstamos")
-        print("10. Salir")
+        print("4. Eliminar libro del catálogo")
+        print("\n--- GESTIÓN DE USUARIOS ---")
+        print("5. Ver lista de usuarios")
+        print("6. Crear nuevo usuario")
+        print("7. Modificar usuario")
+        print("\n--- OPERACIONES ---")
+        print("8. Prestar libro")
+        print("9. Devolver libro")
+        print("10. Ver préstamos de un usuario")
+        print("11. Pagar multa de un usuario")
+        print("12. Actualizar multas y guardar")
+        print("\n13. Salir")
 
         opcion = input("\nElige una opción: ").strip()
 
         if opcion == "1":
-            mostrar_libros(biblioteca)
-        elif opcion == "2":
-            agregar_libro(biblioteca)
-        elif opcion == "3":
-            modificar_libro(biblioteca)
-        elif opcion == "4":
-            eliminar_libro(biblioteca)
-        elif opcion == "5":
-            prestar_libro(biblioteca)
-        elif opcion == "6":
-            devolver_libro(biblioteca)
-        elif opcion == "7":
-            visualizar_prestamos(biblioteca)
-        elif opcion == "8":
-            pagar_multa(biblioteca)
-        elif opcion == "9":
-            administrar_prestamos_manual(biblioteca)
-        elif opcion == "10":
-            # Guardar cambios y salir
-            guardar_datos(biblioteca)
-            print("Saliendo del sistema...")
-            break
-        else:
-            print("Opción inválida. Por favor ingresa un número entre 1 y 10.")
+            _seleccionar_item(biblioteca, "libro")
 
-        # Guardar después de cada operación
-        guardar_datos(biblioteca)
+        elif opcion == "2":
+            nombre = input("Nombre del nuevo libro: ").strip()
+            if not nombre:
+                print("El nombre no puede estar vacío.")
+                continue
+            try:
+                cantidad = int(input("Cantidad de copias: ").strip())
+                if cantidad > 0:
+                    biblioteca.agregar_libro(nombre, cantidad)
+                else:
+                    print("La cantidad debe ser un número positivo.")
+            except ValueError:
+                print("Error: La cantidad debe ser un número entero.")
+
+        elif opcion == "3":
+            print("Selecciona el libro a modificar:")
+            id_libro = _seleccionar_item(biblioteca, "libro")
+            if id_libro:
+                biblioteca.modificar_libro(id_libro)
+
+        elif opcion == "4":
+            print("Selecciona el libro a eliminar:")
+            id_libro = _seleccionar_item(biblioteca, "libro")
+            if id_libro:
+                if input(f"¿Seguro (s/n)?: ").lower() == "s":
+                    biblioteca.eliminar_libro(id_libro)
+
+        elif opcion == "5":
+            _seleccionar_item(biblioteca, "usuario")
+
+        elif opcion == "6":
+            nombre = input("Nombre del nuevo usuario: ").strip()
+            if nombre:
+                biblioteca.crear_usuario(nombre)
+            else:
+                print("El nombre no puede estar vacío.")
+
+        elif opcion == "7":
+            print("Selecciona el usuario a modificar:")
+            id_usuario = _seleccionar_item(biblioteca, "usuario")
+            if id_usuario:
+                biblioteca.modificar_usuario(id_usuario)
+
+        elif opcion == "8":
+            print("Selecciona el usuario que solicita el préstamo:")
+            id_usuario = _seleccionar_item(biblioteca, "usuario")
+            if not id_usuario:
+                continue
+            print("\nSelecciona el libro a prestar:")
+            id_libro = _seleccionar_item(biblioteca, "libro")
+            if id_libro:
+                biblioteca.prestar_libro(id_usuario, id_libro)
+
+        elif opcion == "9":
+            print("Selecciona el usuario que devolverá el libro:")
+            id_usuario = _seleccionar_item(biblioteca, "usuario")
+            if not id_usuario:
+                continue
+            usuario = biblioteca.obtener_usuario(id_usuario)
+            if not usuario.libros:
+                print("Este usuario no tiene libros para devolver.")
+                continue
+
+            print("\n--- Libros prestados al usuario ---")
+            for libro in usuario.libros:
+                print(f"- ID: {libro.id} | Nombre: {libro.nombre}")
+
+            id_libro_dev = input("Introduce el ID del libro a devolver: ").strip()
+            if id_libro_dev:
+                biblioteca.devolver_libro(id_usuario, id_libro_dev)
+
+        elif opcion == "10":
+            print("Selecciona el usuario para ver sus préstamos:")
+            id_usuario = _seleccionar_item(biblioteca, "usuario")
+            if id_usuario:
+                usuario = biblioteca.obtener_usuario(id_usuario)
+                biblioteca.actualizar_multa(usuario)
+                print(f"\n--- Resumen de {usuario.nombre} ---")
+                print(f"Multa Pendiente: ${usuario.multa_pendiente:.2f}")
+                print("Libros en préstamo:")
+                if not usuario.libros:
+                    print("  (Ninguno)")
+                else:
+                    for libro in usuario.libros:
+                        fecha_dev_obj = pm.parse(libro.fecha_devolucion)
+                        print(
+                            f"  - {libro.nombre} (Devolver antes del: {fecha_dev_obj.format('DD-MM-YYYY')})"
+                        )
+                print("-" * 20)
+
+        elif opcion == "11":
+            print("Selecciona el usuario que va a pagar su multa:")
+            id_usuario = _seleccionar_item(biblioteca, "usuario")
+            if id_usuario:
+                biblioteca.pagar_multa(id_usuario)
+
+        elif opcion == "12":
+            biblioteca.actualizar_todas_las_multas()
+            biblioteca.guardar_datos()
+            print("Datos guardados en el archivo.")
+
+        elif opcion == "13":
+            print("Guardando datos y saliendo del sistema...")
+            biblioteca.guardar_datos()
+            break
+
+        else:
+            print("Opción inválida.")
+
+        # Guardar después de cada operación que modifica datos
+        if opcion in ["2", "3", "4", "6", "7", "8", "9", "11"]:
+            biblioteca.guardar_datos()
 
 
 if __name__ == "__main__":

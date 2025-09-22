@@ -1,0 +1,238 @@
+{
+  "libros": [
+    {
+      "id": "b001",
+      "nombre": "Dracula",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b002",
+      "nombre": "El Principito",
+      "disponible": true,
+      "cantidad": 4
+    },
+    {
+      "id": "b003",
+      "nombre": "Cien años de soledad",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b004",
+      "nombre": "Alicia en el país de las maravillas",
+      "disponible": true,
+      "cantidad": 5
+    },
+    {
+      "id": "b005",
+      "nombre": "Dracula II",
+      "disponible": true,
+      "cantidad": 1
+    },
+    {
+      "id": "b006",
+      "nombre": "La Odisea",
+      "disponible": true,
+      "cantidad": 4
+    },
+    {
+      "id": "b007",
+      "nombre": "Hamlet",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b008",
+      "nombre": "Macbeth",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b009",
+      "nombre": "Crónica de una muerte anunciada",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b010",
+      "nombre": "El laberinto de la soledad",
+      "disponible": true,
+      "cantidad": 4
+    },
+    {
+      "id": "b011",
+      "nombre": "Rayuela",
+      "disponible": true,
+      "cantidad": 5
+    },
+    {
+      "id": "b012",
+      "nombre": "Pedro Páramo",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b013",
+      "nombre": "La Tregua",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b014",
+      "nombre": "Ficciones",
+      "disponible": true,
+      "cantidad": 4
+    },
+    {
+      "id": "b015",
+      "nombre": "El amor en los tiempos del cólera",
+      "disponible": true,
+      "cantidad": 1
+    },
+    {
+      "id": "b016",
+      "nombre": "El túnel",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b017",
+      "nombre": "Los renglones torcidos de Dios",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b018",
+      "nombre": "1984",
+      "disponible": true,
+      "cantidad": 6
+    },
+    {
+      "id": "b019",
+      "nombre": "Brave New World",
+      "disponible": true,
+      "cantidad": 4
+    },
+    {
+      "id": "b020",
+      "nombre": "Matar a un ruiseñor",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b021",
+      "nombre": "El gran Gatsby",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b022",
+      "nombre": "Orgullo y prejuicio",
+      "disponible": true,
+      "cantidad": 5
+    },
+    {
+      "id": "b023",
+      "nombre": "Moby Dick",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b024",
+      "nombre": "Ubik",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b025",
+      "nombre": "Don Juan Tenorio",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b026",
+      "nombre": "Los miserables",
+      "disponible": true,
+      "cantidad": 4
+    },
+    {
+      "id": "b027",
+      "nombre": "La divina comedia",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "b028",
+      "nombre": "Crimen y castigo",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b029",
+      "nombre": "Anna Karenina",
+      "disponible": true,
+      "cantidad": 3
+    },
+    {
+      "id": "a00019",
+      "nombre": "Guerra y paz",
+      "disponible": true,
+      "cantidad": 2
+    },
+    {
+      "id": "b031",
+      "nombre": "El Principito II",
+      "disponible": true,
+      "cantidad": 5
+    }
+  ],
+  "prestamos": [
+    {
+      "id": "u001",
+      "nombre": "User1",
+      "libros": [
+        {
+          "id": "b005",
+          "nombre": "Dracula II",
+          "disponible": true,
+          "cantidad": 1,
+          "fecha": "2025-09-10T09:55:00",
+          "fecha_devolucion": "2025-09-24T09:55:00"
+        },
+        {
+          "id": "b002",
+          "nombre": "El Principito",
+          "disponible": true,
+          "cantidad": 4,
+          "fecha": "2025-08-10T10:23:00",
+          "fecha_devolucion": "2025-08-24T10:23:00"
+        }
+      ],
+      "multa_pendiente": 410.0
+    },
+    {
+      "id": "u002",
+      "nombre": "Daniel",
+      "libros": [
+        {
+          "id": "b001",
+          "nombre": "Dracula",
+          "disponible": true,
+          "cantidad": 3,
+          "fecha": "2025-09-10T09:55:00",
+          "fecha_devolucion": "2025-09-24T09:55:00"
+        },
+        {
+          "id": "b005",
+          "nombre": "Dracula II",
+          "disponible": true,
+          "cantidad": 1,
+          "fecha": "2025-09-10T09:55:00",
+          "fecha_devolucion": "2025-09-24T09:55:00"
+        }
+      ],
+      "multa_pendiente": 0.0
+    }
+  ]
+}
