@@ -185,6 +185,12 @@
             "nombre": "Unity Guide for Professionals",
             "disponible": true,
             "cantidad": 2
+        },
+        {
+            "id": "06ad36b3-0a01-4cf3-b918-7c038e26f858",
+            "nombre": "Blender Guide for Gamers",
+            "disponible": true,
+            "cantidad": 4
         }
     ],
     "usuarios": [

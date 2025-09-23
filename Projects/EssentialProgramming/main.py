@@ -1,5 +1,5 @@
 """
-Sistema de gestión de préstamos de libros en una biblioteca escolar.
+Sistema de gestión de préstamos de libros en una biblioteca.
 
 Este script implementa una solución completa para la administración de una
 biblioteca, permitiendo gestionar un catálogo de libros y el préstamo de
@@ -15,11 +15,23 @@ Caracteristicas
 - Persistencia de datos en un único archivo JSON.
 """
 
-import json
-from typing import Dict, List, Any, Optional
-import uuid
-import pendulum as pm
-from pydantic import BaseModel, Field
+import json  # Modulo json importado con el fin de manejar archivos json
+from typing import (
+    Dict,
+    List,
+    Any,
+    Optional,
+)  # Tipado para variables, parametros, y mas, con el fin de recibir ayuda del IDE y validacion
+import uuid  # UUID para generar IDs unicos
+import pendulum as pm  # Pendulum es un modulo que permite manejar objetos datatime de manera inteligente y eficiente: https://pendulum.eustace.io/
+from pydantic import (
+    BaseModel,  # Crear clases que hereden de BaseModel con el fin de completar la validacion de pydantic
+    Field,
+)  # Pydantic es utilizado para validacion de datos de manera estricta
+
+"""
+Field utilizado dentro de BaseModel para indicar distintas caracteristicas de un campo o propiedad de la clase y validacion de la propiedad
+"""
 
 # --- Constantes de configuración ---
 RUTA_JSON = "biblioteca.json"  # Archivo JSON de almacenamiento
@@ -28,7 +40,7 @@ MULTA_POR_DIA = 15.0  # Multa en pesos mexicanos por día de retraso
 LIMITE_LIBROS = 3  # Máximo de libros por usuario
 
 
-# --- Modelos de Datos (Pydantic) ---
+# --- Modelos de Datos (usando Pydantic) ---
 
 
 class Libro(BaseModel):
@@ -42,7 +54,9 @@ class Libro(BaseModel):
         cantidad (int): Número de copias existentes de este libro.
     """
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4())
+    )  # De manera automatica podemos crear IDs unicos utilizando default_factory
     nombre: str
     disponible: bool
     cantidad: int
@@ -140,6 +154,18 @@ class Biblioteca:
             print(f"Error al intentar guardar los datos en el archivo: {e}")
 
     # --- Métodos de Gestión de Libros ---
+    def mostrar_catalogo(self) -> None:
+        items = self.libros
+        print("\n--- Catálogo de Libros ---")
+        if not items:
+            print("No hay libros en el catálogo.")
+            return None
+        for item in items:
+            estado = "Disponible" if item.disponible else "Agotado"
+            print(
+                f"- ID: {item.id} | Nombre: {item.nombre} | Cantidad: {item.cantidad} ({estado})"
+            )
+
     def agregar_libro(self, nombre: str, cantidad: int) -> None:
         """
         Agrega un nuevo libro al catálogo o incrementa la cantidad si ya existe.
@@ -238,6 +264,15 @@ class Biblioteca:
         return False
 
     # --- Métodos de Gestión de Usuarios ---
+    def mostrar_usuarios(self) -> None:
+        items = self.usuarios
+        print("\n--- Lista de Usuarios ---")
+        if not items:
+            print("No hay usuarios registrados.")
+            return None
+        for item in items:
+            print(f"- ID: {item.id} | Nombre: {item.nombre}")
+
     def crear_usuario(self, nombre: str) -> Usuario:
         """
         Crea un nuevo usuario y lo añade a la lista de usuarios.
@@ -395,9 +430,10 @@ class Biblioteca:
             print("Error: ID de usuario no encontrado.")
             return False
 
-        libro_a_devolver = next(
-            (lib for lib in usuario.libros if lib.id == libro_prestado_id), None
-        )
+        libro_a_devolver = None
+        for libro in usuario.libros:
+            if libro.id == libro_prestado_id:
+                libro_a_devolver = libro
 
         if not libro_a_devolver:
             print("Error: El usuario no tiene prestado un libro con ese ID.")
@@ -505,15 +541,7 @@ def _seleccionar_item(biblioteca: Biblioteca, tipo_item: str) -> Optional[str]:
     """
     if tipo_item == "libro":
         items = biblioteca.libros
-        print("\n--- Catálogo de Libros ---")
-        if not items:
-            print("No hay libros en el catálogo.")
-            return None
-        for item in items:
-            estado = "Disponible" if item.disponible else "Agotado"
-            print(
-                f"- ID: {item.id} | Nombre: {item.nombre} | Cantidad: {item.cantidad} ({estado})"
-            )
+        biblioteca.mostrar_catalogo()
     else:  # usuario
         items = biblioteca.usuarios
         print("\n--- Lista de Usuarios ---")
@@ -524,6 +552,7 @@ def _seleccionar_item(biblioteca: Biblioteca, tipo_item: str) -> Optional[str]:
             print(f"- ID: {item.id} | Nombre: {item.nombre}")
 
     id_prefijo = input("Introduce el ID completo o los primeros caracteres: ").strip()
+
     if not id_prefijo:
         return None
 
@@ -561,7 +590,7 @@ def main():
         opcion = input("\nElige una opción: ").strip()
 
         if opcion == "1":
-            _seleccionar_item(biblioteca, "libro")
+            biblioteca.mostrar_catalogo()
 
         elif opcion == "2":
             nombre = input("Nombre del nuevo libro: ").strip()
@@ -591,7 +620,7 @@ def main():
                     biblioteca.eliminar_libro(id_libro)
 
         elif opcion == "5":
-            _seleccionar_item(biblioteca, "usuario")
+            biblioteca.mostrar_usuarios()
 
         elif opcion == "6":
             nombre = input("Nombre del nuevo usuario: ").strip()
@@ -621,37 +650,42 @@ def main():
             id_usuario = _seleccionar_item(biblioteca, "usuario")
             if not id_usuario:
                 continue
-            usuario = biblioteca.obtener_usuario(id_usuario)
-            if not usuario.libros:
-                print("Este usuario no tiene libros para devolver.")
-                continue
+            if usuario := biblioteca.obtener_usuario(id_usuario):
+                if not usuario.libros:
+                    print("Este usuario no tiene libros para devolver.")
+                    continue
 
-            print("\n--- Libros prestados al usuario ---")
-            for libro in usuario.libros:
-                print(f"- ID: {libro.id} | Nombre: {libro.nombre}")
+                print("\n--- Libros prestados al usuario ---")
+                for libro in usuario.libros:
+                    print(f"- ID: {libro.id} | Nombre: {libro.nombre}")
 
-            id_libro_dev = input("Introduce el ID del libro a devolver: ").strip()
-            if id_libro_dev:
-                biblioteca.devolver_libro(id_usuario, id_libro_dev)
+                id_libro_dev = input("Introduce el ID del libro a devolver: ").strip()
+                if id_libro_dev:
+                    biblioteca.devolver_libro(id_usuario, id_libro_dev)
+
+            else:
+                print("Usuario no encontrado.")
 
         elif opcion == "10":
             print("Selecciona el usuario para ver sus préstamos:")
             id_usuario = _seleccionar_item(biblioteca, "usuario")
             if id_usuario:
-                usuario = biblioteca.obtener_usuario(id_usuario)
-                biblioteca.actualizar_multa(usuario)
-                print(f"\n--- Resumen de {usuario.nombre} ---")
-                print(f"Multa Pendiente: ${usuario.multa_pendiente:.2f}")
-                print("Libros en préstamo:")
-                if not usuario.libros:
-                    print("  (Ninguno)")
+                if usuario := biblioteca.obtener_usuario(id_usuario):
+                    biblioteca.actualizar_multa(usuario)
+                    print(f"\n--- Resumen de {usuario.nombre} ---")
+                    print(f"Multa Pendiente: ${usuario.multa_pendiente:.2f}")
+                    print("Libros en préstamo:")
+                    if not usuario.libros:
+                        print("  (Ninguno)")
+                    else:
+                        for libro in usuario.libros:
+                            fecha_dev_obj = pm.parse(libro.fecha_devolucion)
+                            print(
+                                f"  - {libro.nombre} (Devolver antes del: {fecha_dev_obj.format('DD-MM-YYYY')})"
+                            )
+                    print("-" * 20)
                 else:
-                    for libro in usuario.libros:
-                        fecha_dev_obj = pm.parse(libro.fecha_devolucion)
-                        print(
-                            f"  - {libro.nombre} (Devolver antes del: {fecha_dev_obj.format('DD-MM-YYYY')})"
-                        )
-                print("-" * 20)
+                    print("Usuario no encontrado.")
 
         elif opcion == "11":
             print("Selecciona el usuario que va a pagar su multa:")
